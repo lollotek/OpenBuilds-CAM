@@ -1486,7 +1486,13 @@ if (typeof window == "undefined") { // Only run as worker
     //previous point is not always at i-1, because repeated points in the polygon are skipped
     // var previousPoint = clipperPolyline[0];
     var previousPoint = new Point(clipperPolyline[0].X, clipperPolyline[0].Y, 0); //clipperPolyline[i - 1];
-    for (var i = 1; i < clipperPolyline.length - 1; i++) {
+    
+    // TODO: create lead in
+    var lastPoint = new Point(clipperPolyline[clipperPolyline.length -1].X, clipperPolyline[clipperPolyline.length -1].Y, 0); //clipperPolyline[i - 1];
+    
+    clipperPolyline.push(clipperPolyline[0])
+
+    for (var i = 1; i < clipperPolyline.length -1; i++) {
       previousPoint = new Point(clipperPolyline[i - 1].X, clipperPolyline[i - 1].Y, 0); //clipperPolyline[i - 1];
       var point = new Point(clipperPolyline[i].X, clipperPolyline[i].Y, 0); //clipperPolyline[i];
       if (previousPoint.sqDistance(point) == 0)
@@ -1496,16 +1502,18 @@ if (typeof window == "undefined") { // Only run as worker
       var nextPoint = new Point(clipperPolyline[i + 1].X, clipperPolyline[i + 1].Y, 0) //clipperPolyline[i + 1];
       var angle = point.angle(previousPoint, nextPoint);
       var overshoot = point.add(incomingVector.normalized().scale(clipperRadius));
-      result.push(overshoot);
       if (Math.abs(angle) > toleranceAngleRadians) {
-
-        var arcPoints = 100 / (2 * Math.PI) * Math.abs(angle);
-        var incomingAngle = incomingVector.atan2();
-        for (var j = 0; j <= arcPoints; j++) {
-          var a = incomingAngle + angle / arcPoints * j;
-          var pt = point.add(polarPoint(clipperRadius, a));
-          result.push(pt);
-        }
+        result.push(overshoot);
+        result.push(point.add(nextPoint.sub(point).normalized().scale(clipperRadius)));
+      //   var arcPoints = 100 / (2 * Math.PI) * Math.abs(angle);
+      //   var incomingAngle = incomingVector.atan2();
+      //   for (var j = 0; j <= arcPoints; j++) {
+      //     var a = incomingAngle + angle / arcPoints * j;
+      //     var pt = point.add(polarPoint(clipperRadius, a));
+      //   }
+      //   result.push(pt);
+      }else{
+        result.push(point);
       }
       previousPoint = point;
     }

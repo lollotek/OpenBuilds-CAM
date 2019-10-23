@@ -1477,22 +1477,170 @@ if (typeof window == "undefined") { // Only run as worker
     return dragknifeGrp
   };
 
+  // function angleBetweenSegments(v1, v2) {
+  //   const dir1 = vec2.set(vec2.create(), v1[1][0] - v1[0][0], v1[1][1] - v1[0][1])
+  //   vec2.normalize(dir1, dir1)
+  //   const dir2 = vec2.set(vec2.create(), v2[1][0] - v2[0][0], v2[1][1] - v2[0][1])
+  //   vec2.normalize(dir2, dir2)
+  //   return Math.acos(vec2.dot(dir1, dir2))
+  // }
+  
+  dot = function (a, b) {
+    console.log('dot ', a[0], b[0], a[1] , b[1] , ' =>', a[0] * b[0] + a[1] * b[1])
+    return a[0] * b[0] + a[1] * b[1]
+  }
+
+  findMiddlePoint = function (a, b) {
+    var len = vectLen(a, b)
+    var vect = b.sub(a).normalized()
+    return(a.add(new Point(vect.X * len, vect.Y * len, 0)))
+  }
+
+  vectLen = function (a, b) {
+    console.log('len a: ', a , 'b: ', b)
+    var x = b.X - a.X,
+        y = b.Y - a.Y
+    var len = x*x + y*y
+    if (len > 0) {
+        //TODO: evaluate use of glm_invsqrt here?
+      len = 1 / Math.sqrt(len)
+      len = 1 / Math.sqrt(len)
+    }
+    return len
+  }
+
+//   function normalize(a) {
+//     var out = a
+//     var x = a[0],
+//         y = a[1]
+//     var len = x*x + y*y
+//     if (len > 0) {
+//         //TODO: evaluate use of glm_invsqrt here?
+//         len = 1 / Math.sqrt(len)
+//         out[0] = a[0] * len
+//         out[1] = a[1] * len
+//     }
+//     return out
+//   }
+
+  angleBetween = function (dir1, dir2) {
+    return Math.acos(dot(dir1, dir2))
+  }
+  
+  // export function angleBetweenPoints(p1: Vec2, p2: Vec2) {
+  //   return Math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+  // }
+
+  inside = function (point, vs) {
+    // ray-casting algorithm based on
+    // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+
+    var x = point[0], y = point[1];
+
+    var inside = false;
+    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        var xi = vs[i][0], yi = vs[i][1];
+        var xj = vs[j][0], yj = vs[j][1];
+
+        var intersect = ((yi > y) != (yj > y))
+            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+
+    return inside;
+  };
+
+  calcAngleDiff = function (p1, p2) {
+    return Math.atan2(
+      p2.X - p1.X,
+      p2.Y - p1.Y
+    )  // * 180 / Math.PI;
+  };
+  
+  circularArc = function(centerX, centerY, minAngle, maxAngle, r) {
+    var start = polarToCartesian(centerX, centerY, r, maxAngle);
+    var end = polarToCartesian(centerX, centerY, r, minAngle);
+    const largeArcFlag = maxAngle - minAngle <= 180 ? 0 : 1;
+    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+  };
+
+  
   addCornerActions = function(clipperPolyline, clipperRadius, toleranceAngleRadians) {
-    console.log("clipperPolyline Starting :  ", clipperPolyline);
+    console.log("clipperPolyline starting :  ", clipperPolyline);
     if (clipperRadius == 0 || clipperPolyline.length == 0)
       return clipperPolyline;
     var result = [];
+    
+    // Search where start with lead In
+    for (var i = 1; i < clipperPolyline.length; i++) { // clipperPolyline.length
+      // is the line enough long?
+      var currentPoint =  new Point(clipperPolyline[i -1].X, clipperPolyline[i -1].Y, 0)
+      var nextPoint =  new Point(clipperPolyline[i].X, clipperPolyline[i].Y, 0)
+      var len = vectLen(currentPoint, nextPoint)
+      if (len > 1) {
+        var middlePoint = findMiddlePoint(currentPoint, nextPoint)
+        // var angle =   Math.atan2(b.sub(a).normalized().X, b.sub(a).normalized().Y)
+
+
+        // var previousPoint = new Point(clipperPolyline[i - 1].X, clipperPolyline[i - 1].Y, 0)
+        // var point= new Point(clipperPolyline[i].X, clipperPolyline[i].Y, 0)
+        // var nextPoint = new Point(clipperPolyline[i + 1].X, clipperPolyline[i + 1].Y, 0) //clipperPolyline[i + 1];
+        // var angle = point.angle(previousPoint, nextPoint);
+        
+        
+        
+        
+        var angle = calcAngleDiff(currentPoint,nextPoint)
+        var RAD90DEG = (Math.PI / 2)
+        console.log('len angle ', angle)
+        const p1 = [-2 * Math.sin(RAD90DEG + angle) + middlePoint.X, 2 * Math.cos(RAD90DEG + angle) + middlePoint.Y] // FIXME: 2 is distance
+        const p2 = [-2 * Math.sin(-RAD90DEG + angle) + middlePoint.X, 2 * Math.cos(-RAD90DEG + angle) + middlePoint.Y] // FIXME: 2 is distance
+        console.log('len middlePoint ', middlePoint, p1, p2)
+        
+        if ( inside(p1, clipperPolyline.map(point => [point.X,point.Y])) ) {
+          console.log('len inside p1: ')
+          clipperPolyline = [...clipperPolyline.slice(1, i), new Point(p1[0], p1[1], 0), ...clipperPolyline.slice(i)]
+          break
+        } else if ( inside(p2, clipperPolyline.map(point => [point.X,point.Y]))) {
+          console.log('len inside p2: ')
+          clipperPolyline = [...clipperPolyline.slice(0, i), new Point(p2[0], p2[1], 0), middlePoint, ...clipperPolyline.slice(i)]
+          break
+        }
+
+      } else {
+        console.log('len - ', len)
+      }
+
+    }
+      
+      // shif to find a new starting point
+      clipperPolyline.push(clipperPolyline.shift());
+
     result.push(clipperPolyline[0]);
     //previous point is not always at i-1, because repeated points in the polygon are skipped
     // var previousPoint = clipperPolyline[0];
     var previousPoint = new Point(clipperPolyline[0].X, clipperPolyline[0].Y, 0); //clipperPolyline[i - 1];
     
-    // TODO: create lead in
+
     var lastPoint = new Point(clipperPolyline[clipperPolyline.length -1].X, clipperPolyline[clipperPolyline.length -1].Y, 0); //clipperPolyline[i - 1];
     
     clipperPolyline.push(clipperPolyline[0])
 
     for (var i = 1; i < clipperPolyline.length -1; i++) {
+      // try{
+      //   console.log('clipperPolyline angle: ', clipperPolyline[i], clipperPolyline[+1], 
+      //     angleBetween(
+      //         normalize([clipperPolyline[i + 1].X - clipperPolyline[i].X,
+      //           clipperPolyline[i + 1].Y  - clipperPolyline[i].Y]),
+      //         normalize([
+      //           clipperPolyline[i+2].X - clipperPolyline[i+1].X,
+      //           clipperPolyline[i+2].Y - clipperPolyline[i+1].Y])
+      //       ) // * 180 / Math.PI
+      //     )
+      // }catch(e){
+      //   console.log('error')
+      // }
+      
       previousPoint = new Point(clipperPolyline[i - 1].X, clipperPolyline[i - 1].Y, 0); //clipperPolyline[i - 1];
       var point = new Point(clipperPolyline[i].X, clipperPolyline[i].Y, 0); //clipperPolyline[i];
       if (previousPoint.sqDistance(point) == 0)
